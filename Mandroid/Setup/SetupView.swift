@@ -6,6 +6,7 @@ struct SetupView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var coordinator: RunnerCoordinator
     @State private var mirrorPreference = RunnerSettings.load().downloadMirror
+    @State private var dataPartitionGB = RunnerSettings.load().dataPartitionMB / 1024
 
     var body: some View {
         VStack(spacing: 0) {
@@ -115,6 +116,20 @@ struct SetupView: View {
                 s.downloadMirror = new
                 s.save()
                 coordinator.retry()
+            }
+            if !coordinator.avdStore.hasUserdata(coordinator.avdName) {
+                Stepper("Internal storage: \(dataPartitionGB) GB", value: $dataPartitionGB,
+                        in: RunnerSettings.dataPartitionGBRange, step: RunnerSettings.dataPartitionStepGB)
+                    .onChange(of: dataPartitionGB) { _, new in
+                        var s = RunnerSettings.load()
+                        let megabytes = new * 1024
+                        guard RunnerSettings.isValidDataPartitionMB(megabytes), s.dataPartitionMB != megabytes else { return }
+                        s.dataPartitionMB = megabytes
+                        s.save()
+                    }
+                Text("Used for installed apps and games. The file grows on this Mac only as it fills up. This cannot be changed after the emulator is created.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Text("By continuing you accept the Android SDK License Agreement and the terms of the Google Play system image. Nothing outside this app's folder is modified.")
                 .font(.caption).foregroundStyle(.secondary)

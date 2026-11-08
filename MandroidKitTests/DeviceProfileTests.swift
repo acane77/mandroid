@@ -78,6 +78,70 @@ import Testing
         #expect(display.density == 240)
     }
 
+    @Test func dataPartitionPersistsRejectsOutOfRangeAndDoesNotRequireRestart() throws {
+        let suite = "data-partition-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(RunnerSettings.load(from: defaults).dataPartitionMB == 16 * 1024)
+        var settings = RunnerSettings()
+        settings.dataPartitionMB = 64 * 1024
+        settings.save(to: defaults)
+        let loaded = RunnerSettings.load(from: defaults)
+        #expect(loaded.dataPartitionMB == settings.dataPartitionMB)
+        var config = AVDConfig(systemImagePath: "system-images;android-36.1;google_apis_playstore;arm64-v8a")
+        loaded.apply(to: &config)
+        #expect(config.dataPartitionMB == 64 * 1024)
+        #expect(config.renderConfigINI().contains("disk.dataPartition.size=65536M\n"))
+        defaults.set(1000, forKey: "dataPartitionMB")
+        #expect(RunnerSettings.load(from: defaults).dataPartitionMB == 16 * 1024)
+        defaults.set(600 * 1024, forKey: "dataPartitionMB")
+        #expect(RunnerSettings.load(from: defaults).dataPartitionMB == 16 * 1024)
+        defaults.set(24 * 1024, forKey: "dataPartitionMB")
+        #expect(RunnerSettings.load(from: defaults).dataPartitionMB == 16 * 1024)
+        var resized = loaded
+        resized.dataPartitionMB = 128 * 1024
+        #expect(!resized.requiresRestart(comparedTo: loaded))
+    }
+
+    @Test func dataPartitionSizeIsFrozenOnceUserdataExists() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AVDStore(paths: SDKPaths(root: root))
+        var config = AVDConfig(systemImagePath: "system-images;android-36.1;google_apis_playstore;arm64-v8a")
+        config.dataPartitionMB = 32 * 1024
+        #expect(store.createdDataPartitionSize(config.name) == nil)
+        #expect(try !store.write(config))
+        let iniURL = store.directory(for: config.name).appendingPathComponent("config.ini")
+        func ini() throws -> String { try String(contentsOf: iniURL, encoding: .utf8) }
+        #expect(try ini().contains("disk.dataPartition.size=32768M\n"))
+
+        let marker = Data("installed apps".utf8)
+        let userdata = store.directory(for: config.name).appendingPathComponent("userdata-qemu.img")
+        try marker.write(to: userdata)
+        config.dataPartitionMB = 128 * 1024
+        #expect(try !store.write(config))
+        #expect(try ini().contains("disk.dataPartition.size=32768M\n"))
+        #expect(try !ini().contains("131072M"))
+        #expect(try Data(contentsOf: userdata) == marker)
+        #expect(store.createdDataPartitionSize(config.name) == "32768M")
+
+        try FileManager.default.removeItem(at: userdata)
+        let qcow = store.directory(for: config.name).appendingPathComponent("userdata-qemu.img.qcow2")
+        try Data("qcow".utf8).write(to: qcow)
+        config.dataPartitionMB = 256 * 1024
+        #expect(try !store.write(config))
+        #expect(try ini().contains("disk.dataPartition.size=32768M\n"))
+        #expect(try Data(contentsOf: qcow) == Data("qcow".utf8))
+        #expect(store.hasUserdata(config.name))
+
+        try FileManager.default.removeItem(at: qcow)
+        #expect(!store.hasUserdata(config.name))
+        config.dataPartitionMB = 64 * 1024
+        #expect(try !store.write(config))
+        #expect(try ini().contains("disk.dataPartition.size=65536M\n"))
+        #expect(store.createdDataPartitionSize(config.name) == nil)
+    }
+
     @Test func restartDependsOnEffectiveProfile() {
         let running = RunnerSettings()
         var edited = running

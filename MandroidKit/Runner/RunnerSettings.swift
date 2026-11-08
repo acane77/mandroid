@@ -7,6 +7,10 @@ public struct RunnerSettings: Sendable, Equatable {
     public var kernelSUEnabled = false
     public var ramMB: Int = 4096
     public var cores: Int = 4
+    /// Internal storage written to `disk.dataPartition.size` before the userdata
+    /// image exists. 16 GiB matches the previous fixed size. `AVDStore` keeps the
+    /// recorded size once that image exists, so this does not resize or wipe it.
+    public var dataPartitionMB: Int = defaultDataPartitionMB
     public var gpuBackend: GPUBackend = .defaultBackend
     public var deviceProfile: DeviceProfile = .tablet
     public var customDeviceWidthDP: Int = 400
@@ -26,6 +30,17 @@ public struct RunnerSettings: Sendable, Equatable {
 
     public static let ramChoices = [2048, 3072, 4096, 6144, 8192]
     public static let coreChoices = [2, 4, 6, 8]
+    public static let defaultDataPartitionMB = 16 * 1024
+    /// Inclusive gigabyte bounds for a new emulator's internal storage.
+    public static let dataPartitionGBRange = 16...512
+    public static let dataPartitionStepGB = 16
+
+    /// True for 16, 32, … 512 GiB, stored as mebibytes (`16 GiB` is `16384`).
+    public static func isValidDataPartitionMB(_ value: Int) -> Bool {
+        guard value.isMultiple(of: 1024) else { return false }
+        let gigabytes = value / 1024
+        return dataPartitionGBRange.contains(gigabytes) && gigabytes.isMultiple(of: dataPartitionStepGB)
+    }
 
     public init() {}
 
@@ -35,6 +50,7 @@ public struct RunnerSettings: Sendable, Equatable {
         if let v = defaults.object(forKey: "mediaVolumePercent") as? Int, (0...100).contains(v) { s.mediaVolumePercent = v }
         if let v = defaults.object(forKey: "ramMB") as? Int, ramChoices.contains(v) { s.ramMB = v }
         if let v = defaults.object(forKey: "cores") as? Int, coreChoices.contains(v) { s.cores = v }
+        if let v = defaults.object(forKey: "dataPartitionMB") as? Int, isValidDataPartitionMB(v) { s.dataPartitionMB = v }
         // bool(forKey:) also accepts "YES"/"NO" strings from `-hostCamera YES` launch arguments.
         if defaults.object(forKey: "hostMicrophone") != nil { s.hostMicrophone = defaults.bool(forKey: "hostMicrophone") }
         if defaults.object(forKey: "hostCamera") != nil { s.hostCamera = defaults.bool(forKey: "hostCamera") }
@@ -59,6 +75,7 @@ public struct RunnerSettings: Sendable, Equatable {
         defaults.set(kernelSUEnabled, forKey: "kernelSUEnabled")
         defaults.set(ramMB, forKey: "ramMB")
         defaults.set(cores, forKey: "cores")
+        defaults.set(dataPartitionMB, forKey: "dataPartitionMB")
         defaults.set(gpuBackend.rawValue, forKey: "gpuBackend")
         defaults.set(deviceProfile.rawValue, forKey: "deviceProfile")
         defaults.set(customDeviceWidthDP, forKey: "customDeviceWidthDP")
@@ -108,6 +125,7 @@ public struct RunnerSettings: Sendable, Equatable {
         config.kernelSUEnabled = kernelSUEnabled
         config.ramMB = ramMB
         config.cores = cores
+        config.dataPartitionMB = dataPartitionMB
         config.gpuBackend = gpuBackend
         config.displayName = "Mandroid (\(deviceProfile.label))"
         config.lcdWidth = deviceDisplay.widthPixels

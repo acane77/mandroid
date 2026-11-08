@@ -274,8 +274,13 @@ AVD without `avdmanager`: two files.
 ```
 
 The default uses Pixel Tablet resolution (2560×1600), a 320 dpi logical
-density (1280×800 dp), and the same ARM64 Google Play system image. Existing
-AVDs retain installed apps and data; changing display geometry, the GPU
+density (1280×800 dp), and the same ARM64 Google Play system image.
+`disk.dataPartition.size` defaults to `16384M` (16 GiB). First-run setup and
+Settings can choose 16–512 GiB, in 16 GiB steps, before the userdata image
+exists. The image is qcow2 and grows on the host only as it fills. Once
+`userdata-qemu.img` or `userdata-qemu.img.qcow2` exists, `AVDStore` keeps the
+recorded size; changing the preference does not resize or wipe the image.
+Existing AVDs retain installed apps and data; changing display geometry, the GPU
 backend or a camera mode skips loading the old quickboot snapshot on the next
 boot (the guest camera HAL enumerates host cameras once at boot). The
 emulator ships no `devices.xml`; `hw.device.name` is a plain string with no

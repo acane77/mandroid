@@ -13,8 +13,26 @@ public struct AVDStore: Sendable {
         FileManager.default.fileExists(atPath: directory(for: name).appendingPathComponent("config.ini").path)
     }
 
+    /// True once the emulator has created the data image. Changing
+    /// `disk.dataPartition.size` after that does not resize the image.
+    public func hasUserdata(_ name: String) -> Bool {
+        let dir = directory(for: name)
+        let files = ["userdata-qemu.img", "userdata-qemu.img.qcow2"]
+        return files.contains { FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path) }
+    }
+
+    /// `disk.dataPartition.size` from `config.ini` when a userdata image is present.
+    public func createdDataPartitionSize(_ name: String) -> String? {
+        guard hasUserdata(name) else { return nil }
+        let file = directory(for: name).appendingPathComponent("config.ini")
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+        return Self.configValue("disk.dataPartition.size", in: text)
+    }
+
     /// Writes the AVD files. Existing user data (`userdata-qemu.img`,
-    /// snapshots) is preserved; only the ini files are (re)written.
+    /// `userdata-qemu.img.qcow2`, snapshots) is preserved; only the ini files
+    /// are (re)written. Once a userdata image exists, `disk.dataPartition.size`
+    /// stays at the value that image was created with.
     /// The emulator appends `hw.displayN.*` keys at runtime; we strip them so
     /// every boot starts with display 0 only.
     /// Returns true when an existing display, GPU, boot or camera profile changed
@@ -25,26 +43,42 @@ public struct AVDStore: Sendable {
         let dir = directory(for: config.name)
         let ini = dir.appendingPathComponent("config.ini")
         let previous = try? String(contentsOf: ini, encoding: .utf8)
-        let rendered = config.renderConfigINI()
+        var rendered = config.renderConfigINI()
+        if hasUserdata(config.name),
+           let previous,
+           let kept = Self.configValue("disk.dataPartition.size", in: previous) {
+            rendered = Self.replacingConfigValue("disk.dataPartition.size", with: kept, in: rendered)
+        }
         let snapshotKeys = ["hw.lcd.width", "hw.lcd.height", "hw.lcd.density", "hw.initialOrientation", "hw.gpu.mode", "mandroid.gpu.backend", "mandroid.kernelsu.enabled",
                             "hw.camera.front", "hw.camera.back"]
-        func value(_ key: String, in text: String) -> String? {
-            for line in text.split(separator: "\n") {
-                let parts = line.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
-                if parts.count == 2, parts[0].trimmingCharacters(in: .whitespaces) == key {
-                    return parts[1].trimmingCharacters(in: .whitespaces)
-                }
-            }
-            return nil
-        }
         let profileChanged = previous.map { old in
-            snapshotKeys.contains { value($0, in: old) != value($0, in: rendered) }
+            snapshotKeys.contains { Self.configValue($0, in: old) != Self.configValue($0, in: rendered) }
         } ?? false
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try rendered.write(to: ini, atomically: true, encoding: .utf8)
         try config.renderPointerINI(avdDirectory: dir)
             .write(to: paths.avdHome.appendingPathComponent("\(config.name).ini"), atomically: true, encoding: .utf8)
         return profileChanged
+    }
+
+    private static func configValue(_ key: String, in text: String) -> String? {
+        for line in text.split(separator: "\n") {
+            let parts = line.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            if parts.count == 2, parts[0].trimmingCharacters(in: .whitespaces) == key {
+                return parts[1].trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
+    }
+
+    private static func replacingConfigValue(_ key: String, with newValue: String, in text: String) -> String {
+        text.split(separator: "\n", omittingEmptySubsequences: false).map { line in
+            let parts = line.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            if parts.count == 2, parts[0].trimmingCharacters(in: .whitespaces) == key {
+                return "\(key)=\(newValue)"
+            }
+            return String(line)
+        }.joined(separator: "\n")
     }
 
     /// Removes `hw.display1..3` lines the emulator may have persisted.

@@ -10,6 +10,8 @@ public struct AVDConfig: Sendable, Hashable {
     public var ramMB: Int = 4096
     public var cores: Int = 4
     public var heapMB: Int = 512
+    /// Overridden from `RunnerSettings` before the userdata image exists.
+    /// The emulator sizes `userdata-qemu.img` from this value only on first creation.
     public var dataPartitionMB: Int = 16384
     // Pixel Tablet resolution, with xhdpi logical density (1280×800 dp).
     // Natural orientation is landscape because width exceeds height.

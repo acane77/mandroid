@@ -46,6 +46,18 @@ struct SettingsView: View {
                 Picker("CPU cores", selection: $settings.cores) {
                     ForEach(RunnerSettings.coreChoices, id: \.self) { Text("\($0)").tag($0) }
                 }
+                if coordinator.avdStore.hasUserdata(coordinator.avdName) {
+                    if let raw = coordinator.avdStore.createdDataPartitionSize(coordinator.avdName) {
+                        LabeledContent("Internal storage") { Text(internalStorageLabel(raw)) }
+                    }
+                    Text("Chosen when this emulator was created and cannot be changed.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Stepper("Internal storage: \(settings.dataPartitionMB / 1024) GB", value: internalStorageGB,
+                            in: RunnerSettings.dataPartitionGBRange, step: RunnerSettings.dataPartitionStepGB)
+                    Text("Used for installed apps and games. The file grows on this Mac only as it fills up. This cannot be changed after the emulator is created.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Picker("Graphics", selection: $settings.gpuBackend) {
                     ForEach(GPUBackend.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
@@ -159,6 +171,20 @@ struct SettingsView: View {
                 LauncherStubBuilder.sync(coordinator.apps)
             }
         }
+    }
+
+    private var internalStorageGB: Binding<Int> {
+        Binding(
+            get: { settings.dataPartitionMB / 1024 },
+            set: { settings.dataPartitionMB = $0 * 1024 }
+        )
+    }
+
+    private func internalStorageLabel(_ raw: String) -> String {
+        if raw.hasSuffix("M"), let megabytes = Int(raw.dropLast()), megabytes.isMultiple(of: 1024), megabytes > 0 {
+            return "\(megabytes / 1024) GB"
+        }
+        return raw
     }
 
     private func applyVolume() {
