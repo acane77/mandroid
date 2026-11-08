@@ -64,6 +64,15 @@ public struct SDKPaths: Sendable, Hashable {
         return env
     }
 
+    /// Removes records of apps that were installed in the virtual device:
+    /// the icon and label cache, and per-app proxy settings. SDK downloads
+    /// stored beside the app cache are left alone.
+    public func removeInstalledAppRecords() {
+        let fm = FileManager.default
+        try? fm.removeItem(at: cache.appendingPathComponent("apps", isDirectory: true))
+        try? fm.removeItem(at: root.appendingPathComponent("app-proxies.json"))
+    }
+
     public func createDirectories() throws {
         for dir in [root, sdkRoot, avdHome, emulatorHome, downloads, logs, cache, tools, licenses] {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

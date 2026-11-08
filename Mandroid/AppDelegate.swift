@@ -129,6 +129,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windows.closeAll()
         Task { await coordinator.restart() }
     }
+    @objc func deleteEmulator(_ sender: Any?) {
+        EmulatorDeletion.confirm(coordinator: coordinator, windows: windows)
+    }
     @objc func coldBootEmulator(_ sender: Any?) {
         let alert = NSAlert()
         alert.messageText = "Cold boot the emulator?"
@@ -177,6 +180,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else if url.scheme == "mandroid" {
                 URLSchemeHandler(delegate: self).handle(url)
             }
+        }
+    }
+}
+
+@MainActor enum EmulatorDeletion {
+    static func confirm(coordinator: RunnerCoordinator, windows: WindowManager) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Delete the emulator and installed apps?"
+        alert.informativeText = "This removes the virtual device, every installed Android app, and their data. Launcher shortcuts are removed too. The downloaded Android system stays on this Mac, and you can choose the internal storage size before creating a new emulator."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        windows.closeAll()
+        Task {
+            let removed = await coordinator.deleteVirtualDevice()
+            if removed { LauncherStubBuilder.sync([]) }
         }
     }
 }

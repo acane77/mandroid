@@ -33,6 +33,9 @@ struct SetupView: View {
                 case .needsSetup(let plan):
                     Button("Download and Install") { coordinator.runSetup(plan) }
                         .keyboardShortcut(.defaultAction)
+                case .needsEmulator:
+                    Button("Create Emulator") { coordinator.createEmulator() }
+                        .keyboardShortcut(.defaultAction)
                 case .failed:
                     Button("Try Again") { coordinator.retry() }.keyboardShortcut(.defaultAction)
                 default:
@@ -43,12 +46,17 @@ struct SetupView: View {
         }
         .frame(minWidth: 480, idealWidth: 520, minHeight: 360, idealHeight: 480)
         .animation(HostStyle.motion(reduceMotion: reduceMotion), value: stage)
+        .onChange(of: stage) { _, new in
+            guard new == "needs-emulator" else { return }
+            dataPartitionGB = RunnerSettings.load().dataPartitionMB / 1024
+        }
     }
 
     // Progress bytes are intentionally excluded so downloads do not restart transitions.
     private var stage: String {
         switch coordinator.state {
         case .needsSetup: return "plan"
+        case .needsEmulator: return "needs-emulator"
         case .settingUp(let phase):
             switch phase {
             case .fetchingManifests: return "manifests"
@@ -65,6 +73,7 @@ struct SetupView: View {
     private var subtitle: String {
         switch coordinator.state {
         case .needsSetup: return "A one-time download is needed."
+        case .needsEmulator: return "Create a new emulator."
         case .settingUp: return "Downloading components…"
         case .booting: return "Starting the Android emulator…"
         case .failed: return "Something went wrong."
@@ -76,6 +85,12 @@ struct SetupView: View {
         switch coordinator.state {
         case .needsSetup(let plan):
             planView(plan)
+        case .needsEmulator:
+            VStack(alignment: .leading, spacing: 16) {
+                Text("The virtual device and its installed apps have been removed. The downloaded Android system stays on this Mac.")
+                    .fixedSize(horizontal: false, vertical: true)
+                storageChoice
+            }
         case .settingUp(let phase):
             phaseView(phase)
         case .booting(let stage):
@@ -117,21 +132,25 @@ struct SetupView: View {
                 s.save()
                 coordinator.retry()
             }
-            if !coordinator.avdStore.hasUserdata(coordinator.avdName) {
-                Stepper("Internal storage: \(dataPartitionGB) GB", value: $dataPartitionGB,
-                        in: RunnerSettings.dataPartitionGBRange, step: RunnerSettings.dataPartitionStepGB)
-                    .onChange(of: dataPartitionGB) { _, new in
-                        var s = RunnerSettings.load()
-                        let megabytes = new * 1024
-                        guard RunnerSettings.isValidDataPartitionMB(megabytes), s.dataPartitionMB != megabytes else { return }
-                        s.dataPartitionMB = megabytes
-                        s.save()
-                    }
-                Text("Used for installed apps and games. The file grows on this Mac only as it fills up. This cannot be changed after the emulator is created.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            storageChoice
             Text("By continuing you accept the Android SDK License Agreement and the terms of the Google Play system image. Nothing outside this app's folder is modified.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder private var storageChoice: some View {
+        if !coordinator.avdStore.hasUserdata(coordinator.avdName) {
+            Stepper("Internal storage: \(dataPartitionGB) GB", value: $dataPartitionGB,
+                    in: RunnerSettings.dataPartitionGBRange, step: RunnerSettings.dataPartitionStepGB)
+                .onChange(of: dataPartitionGB) { _, new in
+                    var s = RunnerSettings.load()
+                    let megabytes = new * 1024
+                    guard RunnerSettings.isValidDataPartitionMB(megabytes), s.dataPartitionMB != megabytes else { return }
+                    s.dataPartitionMB = megabytes
+                    s.save()
+                }
+            Text("Used for installed apps and games. The file grows on this Mac only as it fills up. This cannot be changed after the emulator is created.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

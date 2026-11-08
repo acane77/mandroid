@@ -69,6 +69,12 @@ struct SettingsView: View {
                     Button("Restart Emulator") { restart(cold: false) }
                     Button("Cold Boot") { restart(cold: true) }
                 }
+                Button("Delete Emulator and Apps…", role: .destructive) {
+                    EmulatorDeletion.confirm(coordinator: coordinator, windows: windows)
+                }
+                .disabled(!canDeleteEmulator)
+                Text("Removes this emulator and every installed Android app. The downloaded system image stays on this Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("KernelSU (experimental)") {
                 Toggle("Boot with KernelSU", isOn: $settings.kernelSUEnabled)
@@ -171,6 +177,10 @@ struct SettingsView: View {
                 LauncherStubBuilder.sync(coordinator.apps)
             }
         }
+    }
+
+    private var canDeleteEmulator: Bool {
+        coordinator.avdStore.exists(coordinator.avdName) || coordinator.avdStore.hasUserdata(coordinator.avdName)
     }
 
     private var internalStorageGB: Binding<Int> {

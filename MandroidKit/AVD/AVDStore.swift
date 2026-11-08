@@ -96,9 +96,14 @@ public struct AVDStore: Sendable {
         try? FileManager.default.removeItem(at: directory(for: name).appendingPathComponent("snapshots/default_boot", isDirectory: true))
     }
 
-    /// Deletes the AVD entirely (cold start from scratch).
+    /// Deletes the AVD entirely, including userdata and installed apps.
+    /// Missing files are ignored. A failure to remove an existing file is thrown
+    /// so the caller does not treat a locked image as gone.
     public func delete(_ name: String) throws {
-        try? FileManager.default.removeItem(at: directory(for: name))
-        try? FileManager.default.removeItem(at: paths.avdHome.appendingPathComponent("\(name).ini"))
+        let fm = FileManager.default
+        for url in [directory(for: name), paths.avdHome.appendingPathComponent("\(name).ini")] {
+            guard fm.fileExists(atPath: url.path) else { continue }
+            try fm.removeItem(at: url)
+        }
     }
 }

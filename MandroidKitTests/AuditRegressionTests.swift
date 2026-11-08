@@ -200,6 +200,42 @@ import Testing
         #expect(await pool.freeCount == 3)
     }
 
+    @MainActor @Test func deleteVirtualDeviceRemovesAppsAndKeepsTheSDK() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let paths = SDKPaths(root: root)
+        try paths.createDirectories()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AVDStore(paths: paths)
+        var config = AVDConfig(systemImagePath: "system-images;android-36.1;google_apis_playstore;arm64-v8a")
+        config.name = "runner"
+        try store.write(config)
+        let userdata = store.directory(for: config.name).appendingPathComponent("userdata-qemu.img.qcow2")
+        try Data("installed games".utf8).write(to: userdata)
+        let appCache = paths.cache.appendingPathComponent("apps/com.example.game-1", isDirectory: true)
+        try FileManager.default.createDirectory(at: appCache, withIntermediateDirectories: true)
+        try Data("icon".utf8).write(to: appCache.appendingPathComponent("meta.json"))
+        try Data("sdk manifest".utf8).write(to: paths.cache.appendingPathComponent("repository.xml"))
+        try FileManager.default.createDirectory(at: paths.emulatorDir, withIntermediateDirectories: true)
+        try Data("emulator".utf8).write(to: paths.emulatorBinary)
+        let proxy = try HTTPProxyEndpoint(host: "127.0.0.1", port: 8080)
+        try AppProxyStore.save(["com.example.game": proxy], at: paths.root)
+
+        let coordinator = RunnerCoordinator(paths: paths)
+        #expect(coordinator.appProxies["com.example.game"]?.port == 8080)
+        #expect(await coordinator.deleteVirtualDevice())
+        #expect(coordinator.state == .needsEmulator)
+        #expect(coordinator.appProxies.isEmpty)
+        #expect(coordinator.apps.isEmpty)
+        #expect(!store.exists(config.name))
+        #expect(!store.hasUserdata(config.name))
+        #expect(!FileManager.default.fileExists(atPath: paths.cache.appendingPathComponent("apps").path))
+        #expect(!FileManager.default.fileExists(atPath: paths.root.appendingPathComponent("app-proxies.json").path))
+        #expect(try Data(contentsOf: paths.cache.appendingPathComponent("repository.xml")) == Data("sdk manifest".utf8))
+        #expect(try Data(contentsOf: paths.emulatorBinary) == Data("emulator".utf8))
+        #expect(await coordinator.deleteVirtualDevice())
+        #expect(coordinator.state == .needsEmulator)
+    }
+
     @Test func downloadRejectsTruncationAndWrongResumeRange() async throws {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [AuditDownloadProtocol.self]

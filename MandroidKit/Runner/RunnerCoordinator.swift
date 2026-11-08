@@ -565,6 +565,42 @@ public final class RunnerCoordinator {
                      sequence: img.seq, timestampUs: img.timestampUs)
     }
 
+    /// Shuts the emulator down and deletes the virtual device, its userdata,
+    /// and the Mac-side records of installed apps. The downloaded SDK stays.
+    /// Returns false when a deletion is already running or the device files
+    /// could not be removed.
+    @discardableResult
+    public func deleteVirtualDevice() async -> Bool {
+        guard !deletingDevice else { return false }
+        deletingDevice = true
+        defer { deletingDevice = false }
+        await shutdown()
+        do {
+            try avdStore.delete(avdName)
+        } catch {
+            state = .failed(error.localizedDescription)
+            return false
+        }
+        paths.removeInstalledAppRecords()
+        appProxies = [:]
+        apps = []
+        sessions = [:]
+        parked = [:]
+        catalog = nil
+        state = .needsEmulator
+        return true
+    }
+
+    private var deletingDevice = false
+
+    /// Boots a new emulator after `deleteVirtualDevice()`. The data partition
+    /// size is whatever Settings saved before this call.
+    public func createEmulator() {
+        guard case .needsEmulator = state else { return }
+        state = .idle
+        start()
+    }
+
     /// Restarts the emulator (cold boot when requested).
     private var restarting = false
 

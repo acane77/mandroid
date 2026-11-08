@@ -35,6 +35,7 @@ enum MainMenu {
         android.addItem(.separator())
         android.addItem(withTitle: "Restart Emulator", action: #selector(AppDelegate.restartEmulator(_:)), keyEquivalent: "").target = delegate
         android.addItem(withTitle: "Cold Boot Emulator…", action: #selector(AppDelegate.coldBootEmulator(_:)), keyEquivalent: "").target = delegate
+        android.addItem(withTitle: "Delete Emulator and Apps…", action: #selector(AppDelegate.deleteEmulator(_:)), keyEquivalent: "").target = delegate
         android.addItem(.separator())
         android.addItem(withTitle: "Show Device Screen", action: #selector(AppDelegate.showDeviceScreen(_:)), keyEquivalent: "d").target = delegate
         android.addItem(withTitle: "Open Play Store", action: #selector(AppDelegate.openPlayStore(_:)), keyEquivalent: "").target = delegate

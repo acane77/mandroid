@@ -280,6 +280,10 @@ Settings can choose 16–512 GiB, in 16 GiB steps, before the userdata image
 exists. The image is qcow2 and grows on the host only as it fills. Once
 `userdata-qemu.img` or `userdata-qemu.img.qcow2` exists, `AVDStore` keeps the
 recorded size; changing the preference does not resize or wipe the image.
+Settings ▸ Delete Emulator and Apps, and the same Android menu command, shut
+the emulator down and delete that AVD together with installed apps, launcher
+stubs, the app catalog cache and per-app proxies. The downloaded SDK stays.
+The next create uses the internal storage chosen before it starts.
 Existing AVDs retain installed apps and data; changing display geometry, the GPU
 backend or a camera mode skips loading the old quickboot snapshot on the next
 boot (the guest camera HAL enumerates host cameras once at boot). The
