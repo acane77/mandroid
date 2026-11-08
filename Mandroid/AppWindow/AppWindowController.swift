@@ -14,6 +14,7 @@ final class AppWindowController: NSWindowController, NSWindowDelegate {
     var onClose: (() -> Void)?
 
     private let frameView = FrameView(frame: .zero)
+    private let wheelSwipe = WheelSwipeDriver()
     private var frameTask: Task<Void, Never>?
     private var resizeTask: Task<Void, Never>?
     private var resizePending = false
@@ -102,6 +103,33 @@ final class AppWindowController: NSWindowController, NSWindowDelegate {
             let display = androidDisplayID
             Task { await session.scroll.scroll(displayID: display, x: x, y: y, axes: axes) }
         }
+        frameView.onWheelSwipe = { [weak self] x, y, input in
+            guard let self, !isParked, !isClosing, let session = coordinator.session else { return }
+            let settings = RunnerSettings.load()
+            let tuning = WheelSwipeTuning(
+                distanceDP: settings.wheelSwipeDistanceDP,
+                speedDPPerSecond: settings.wheelSwipeSpeedDPPerSecond)
+            let display = emulatorDisplay
+            let androidID = androidDisplayID
+            let (width, height) = pixelSize
+            let dpi = frameView.displayDpi
+            Task {
+                guard !self.isParked, !self.isClosing else { return }
+                let accepted = await self.wheelSwipe.wheel(
+                    input, x: x, y: y, tuning: tuning, dpi: dpi, width: width, height: height
+                ) { sample in
+                    await session.input.touch(
+                        display: display, x: sample.x, y: sample.y,
+                        identifier: WheelSwipeMotion.touchIdentifier, pressure: sample.pressure)
+                }
+                if self.isParked || self.isClosing {
+                    await self.wheelSwipe.cancel()
+                    return
+                }
+                // The stroke is a real touch, so Android moves keyboard focus here.
+                if accepted { await session.router.noteTouch(androidDisplayID: androidID) }
+            }
+        }
         frameView.onFirstTouch = { [weak self] in
             guard let self, !isParked, !isClosing, let session = coordinator.session else { return }
             let id = androidDisplayID
@@ -182,6 +210,7 @@ final class AppWindowController: NSWindowController, NSWindowDelegate {
     func park() async {
         guard case .app(let app) = target, !isParked else { return }
         isParked = true
+        await wheelSwipe.cancel()
         resizePending = false
         await resizeTask?.value
         frameTask?.cancel(); frameTask = nil
@@ -320,11 +349,15 @@ final class AppWindowController: NSWindowController, NSWindowDelegate {
         isClosing = true
         resizePending = false
         watchdog?.cancel()
+        let swipe = wheelSwipe
         if case .app(let app) = target {
             Task {
+                await swipe.cancel()
                 await resizeTask?.value
                 await coordinator.closeApp(app)
             }
+        } else {
+            Task { await swipe.cancel() }
         }
         onClose?()
     }

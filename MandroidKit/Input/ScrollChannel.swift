@@ -1,7 +1,8 @@
 import Foundation
 
-/// Sends mouse-wheel events to Android through the long-running
-/// `ScrollInjector` guest helper. The emulator's own wheel injection is
+/// Sends trackpad scroll events to Android through the long-running
+/// `ScrollInjector` guest helper. A mouse-wheel notch is a finger stroke
+/// instead (`WheelSwipeDriver`). The emulator's own wheel injection is
 /// dropped on the phone image, and a synthesised touch drag becomes a click
 /// wherever no scroll container intercepts it. If the helper dies it is
 /// restarted on a later event.

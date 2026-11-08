@@ -138,6 +138,28 @@ import Testing
         let small = RunnerSettings().defaultWindowSize(screenWidth: 800, screenHeight: 600)
         #expect(small.width <= 760 && small.height <= 560)
     }
+
+    @Test func wheelSwipePersistsAndDoesNotRestart() throws {
+        let suite = "wheel-swipe-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let fresh = RunnerSettings.load(from: defaults)
+        #expect(fresh.wheelSwipeDistanceDP == WheelSwipeTuning.defaultDistanceDP)
+        #expect(fresh.wheelSwipeSpeedDPPerSecond == WheelSwipeTuning.defaultSpeedDPPerSecond)
+        var settings = fresh
+        settings.wheelSwipeDistanceDP = 320
+        settings.wheelSwipeSpeedDPPerSecond = 1200
+        settings.save(to: defaults)
+        let loaded = RunnerSettings.load(from: defaults)
+        #expect(loaded.wheelSwipeDistanceDP == 320)
+        #expect(loaded.wheelSwipeSpeedDPPerSecond == 1200)
+        #expect(!loaded.requiresRestart(comparedTo: fresh))
+        defaults.set(8, forKey: "wheelSwipeDistanceDP")
+        defaults.set(50_000, forKey: "wheelSwipeSpeedDPPerSecond")
+        let rejected = RunnerSettings.load(from: defaults)
+        #expect(rejected.wheelSwipeDistanceDP == WheelSwipeTuning.defaultDistanceDP)
+        #expect(rejected.wheelSwipeSpeedDPPerSecond == WheelSwipeTuning.defaultSpeedDPPerSecond)
+    }
 }
 
 

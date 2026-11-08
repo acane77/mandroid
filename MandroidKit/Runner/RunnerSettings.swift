@@ -27,6 +27,10 @@ public struct RunnerSettings: Sendable, Equatable {
     public var landscapeByDefault: Bool = true
     /// Which download host to prefer for SDK components and aapt2.
     public var downloadMirror: DownloadMirror.Preference = .auto
+    /// How far one mouse-wheel notch slides a finger, in dp. Applies immediately.
+    public var wheelSwipeDistanceDP: Int = WheelSwipeTuning.defaultDistanceDP
+    /// How fast that finger travels, in dp per second. Applies immediately.
+    public var wheelSwipeSpeedDPPerSecond: Int = WheelSwipeTuning.defaultSpeedDPPerSecond
 
     public static let ramChoices = [2048, 3072, 4096, 6144, 8192]
     public static let coreChoices = [2, 4, 6, 8]
@@ -58,6 +62,12 @@ public struct RunnerSettings: Sendable, Equatable {
         if let v = defaults.object(forKey: "launcherStubs") as? Bool { s.launcherStubs = v }
         if let v = defaults.object(forKey: "landscapeByDefault") as? Bool { s.landscapeByDefault = v }
         if let v = defaults.string(forKey: "downloadMirror"), let m = DownloadMirror.Preference(rawValue: v) { s.downloadMirror = m }
+        if let v = defaults.object(forKey: "wheelSwipeDistanceDP") as? Int, WheelSwipeTuning.distanceRange.contains(v) {
+            s.wheelSwipeDistanceDP = v
+        }
+        if let v = defaults.object(forKey: "wheelSwipeSpeedDPPerSecond") as? Int, WheelSwipeTuning.speedRange.contains(v) {
+            s.wheelSwipeSpeedDPPerSecond = v
+        }
         if let value = defaults.string(forKey: "gpuBackend"), let backend = GPUBackend(rawValue: value) { s.gpuBackend = backend }
         if let value = defaults.string(forKey: "deviceProfile"), let profile = DeviceProfile(rawValue: value) { s.deviceProfile = profile }
         // integer(forKey:) also accepts numeric launch arguments for isolated tests.
@@ -87,6 +97,8 @@ public struct RunnerSettings: Sendable, Equatable {
         defaults.set(launcherStubs, forKey: "launcherStubs")
         defaults.set(landscapeByDefault, forKey: "landscapeByDefault")
         defaults.set(downloadMirror.rawValue, forKey: "downloadMirror")
+        defaults.set(wheelSwipeDistanceDP, forKey: "wheelSwipeDistanceDP")
+        defaults.set(wheelSwipeSpeedDPPerSecond, forKey: "wheelSwipeSpeedDPPerSecond")
     }
 
     /// Default logical size of a new app window given the usable screen size.

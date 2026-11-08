@@ -551,7 +551,7 @@ registers `mandroid`; not `LSUIElement` (we own real windows).
   (otherwise the touch identifier leaks; the default `expiration` self-heals a
   lost up-event after 120 s). Click-and-hold is a long-press with no special
   handling.
-- Mouse-wheel and trackpad scrolling → Android mouse `ACTION_SCROLL`
+- Trackpad scrolling → Android mouse `ACTION_SCROLL`
   (`SOURCE_MOUSE`) on the window's logical display, injected by the
   long-running `ScrollInjector` guest helper (see "Secondary-display input
   method routing"). `ScrollChannel` feeds it one line per event over a single
@@ -559,20 +559,30 @@ registers `mandroid`; not `LSUIElement` (we own real windows).
   dropped on the phone image, and the only way to get a wheel device
   (`-feature VirtioMouse`) removes the per-display touch devices and must never
   be enabled.
-- Scroll is never a touch. A synthesised drag becomes a click wherever no
-  scroll container intercepts it: content that fits, a horizontal swipe over a
-  vertical list row, a ViewPager below its 16 dp paging slop. Views cancel a
-  click only on a parent's `ACTION_CANCEL` or when the finger leaves their
-  bounds, and the emulator touch API cannot send a cancel. Scrolling does not
-  move keyboard focus either.
-- `ScrollConverter` maps a wheel line to one Android notch (axis 1.0 = the
-  stock 64 dp `config_verticalScrollFactor`). Precise trackpad deltas become
-  display pixels divided by that factor, so standard scroll containers track
-  the fingers 1:1. Only whole pixels are sent; RecyclerView truncates
-  `axis × factor`, so the remainder carries over and a 0.01 px bias absorbs
-  float error. macOS momentum events supply the fling. Views that ignore
-  `ACTION_SCROLL` (e.g. a Material collapsing app bar, pull-to-refresh, the
-  legacy ViewPager) do not react, as with a physical mouse on Android.
+- Vertical mouse-wheel and trackpad scrolling is a finger stroke on touch
+  identifier 1 (mouse clicks stay on identifier 0). Games treat
+  `ACTION_SCROLL` as a tiny nudge, including when macOS reports a precise
+  pixel delta for an ordinary wheel. A phase-less notch travels
+  `wheelSwipeDistanceDP` at `wheelSwipeSpeedDPPerSecond`; the integer line
+  count is used when the point delta is precise, and a smooth wheel that has
+  no line count is about 10 points per notch. A trackpad gesture (scroll
+  phase or momentum) moves the finger by the display-pixel delta scaled by
+  `distance / 180`, so the default matches the fingers and a larger distance
+  reaches farther. Positive AppKit delta moves the finger down the screen.
+  Further events before the finger lifts extend the same stroke, momentum
+  included. Outstanding wheel travel is capped at a few notches so a fast
+  wheel cannot leave the finger moving long after it stops, and a notch in
+  the opposite direction turns the finger around. A scroll while the mouse
+  button is held, and a horizontal-only scroll, stay `ACTION_SCROLL`. The
+  finger lifts when the stroke finishes, and also when the window closes or
+  parks.   The stroke is a real touch, so Android moves keyboard focus and
+  `InputRouter.noteTouch` records the display. Distance can be set down to
+  10 dp. A stroke that never leaves a single control can still be delivered
+  as a click, because the emulator touch API cannot send `ACTION_CANCEL`.
+- `ScrollConverter` still maps the remaining `ACTION_SCROLL` path. Precise
+  deltas become display pixels divided by the stock 64 dp scroll factor.
+  Only whole pixels are sent; RecyclerView truncates `axis × factor`, so the
+  remainder carries over and a 0.01 px bias absorbs float error.
 - Right-click is unmapped by default.
 
 ### 5.4 Keyboard and focus
@@ -688,8 +698,10 @@ an installed platform android.jar). The same JAR includes `RenderAppIcon`,
 which loads the launcher activity icon through Android PackageManager and
 renders it to PNG, and `ScrollInjector`, which stays running and turns
 `display x y vscroll hscroll` lines on stdin into mouse `ACTION_SCROLL`
-events through `InputManagerGlobal.injectInputEvent`. Runtime users need no
-Java or Android build tools.
+events through `InputManagerGlobal.injectInputEvent`. Horizontal scrolling,
+and a wheel notch while the mouse button is held, use that path. Vertical
+mouse-wheel and trackpad scrolling is a finger stroke instead. Runtime users need
+no Java or Android build tools.
 
 ### Native media volume
 

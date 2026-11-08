@@ -1,4 +1,5 @@
 import AppKit
+import MandroidKit
 import Testing
 
 @MainActor @Suite(.serialized) struct FrameViewInputTests {
@@ -10,9 +11,15 @@ import Testing
         let x: Int, y: Int, vertical: Double, horizontal: Double
     }
 
+    private struct Swipe: Equatable {
+        let x: Int, y: Int
+        let input: WheelSwipeInput
+    }
+
     private final class Recorder {
         var touches: [Touch] = []
         var scrolls: [Scroll] = []
+        var swipes: [Swipe] = []
         var focusChanges = 0
     }
 
@@ -24,6 +31,7 @@ import Testing
         let r = Recorder()
         view.onTouch = { r.touches.append(Touch(x: $0, y: $1, identifier: $2, pressure: $3)) }
         view.onScroll = { r.scrolls.append(Scroll(x: $0, y: $1, vertical: $2.vertical, horizontal: $2.horizontal)) }
+        view.onWheelSwipe = { r.swipes.append(Swipe(x: $0, y: $1, input: $2)) }
         view.onFirstTouch = { r.focusChanges += 1 }
         return (view, r)
     }
@@ -53,7 +61,10 @@ import Testing
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
         #expect(r.touches.isEmpty)
         #expect(r.focusChanges == 0)
-        #expect(r.scrolls.count == 4)
+        #expect(r.scrolls.isEmpty)
+        // 400 pt view of an 800 px display: point deltas double. The phase-less
+        // notch stays one wheel line.
+        #expect(r.swipes.map(\.input) == [.pixels(-60), .pixels(-4), .pixels(-2), .lines(-1)])
     }
 
     @Test func zeroDeltaSendsNothing() throws {
@@ -67,10 +78,9 @@ import Testing
         // 400 pt view showing 800 px: 30 pt of finger travel is 60 px.
         let (view, r) = view()
         view.scrollWheel(with: try scroll(dy: -30, phase: .began))
-        let s = try #require(r.scrolls.first)
-        #expect(Int(Float(s.vertical) * 128) == -60)
-        #expect(s.horizontal == 0)
-        #expect(s.x == 400 && s.y == 800)
+        #expect(r.scrolls.isEmpty)
+        #expect(r.swipes.first?.input == .pixels(-60))
+        #expect(r.swipes.first?.x == 400 && r.swipes.first?.y == 800)
     }
 
     @Test func horizontalTrackpadScroll() throws {
@@ -81,14 +91,50 @@ import Testing
         #expect(s.vertical == 0)
     }
 
-    /// One notch must scroll Android's own 64 dp at any window scale and
-    /// density; the touch-drag version sent nothing here.
+    /// A wheel notch is a finger stroke. Distance is applied later in dp, so the
+    /// line count does not depend on the window size or density.
     @Test(arguments: [(400.0, 800.0, 320), (800.0, 1600.0, 320), (800.0, 1600.0, 480), (200.0, 400.0, 160)])
-    func wheelNotchIsOneAndroidNotch(size: (Double, Double, Int)) throws {
+    func wheelNotchRequestsOneFingerStroke(size: (Double, Double, Int)) throws {
         let (view, r) = view(width: size.0, height: size.1, dpi: size.2)
         view.scrollWheel(with: try scroll(dy: -1, precise: false))
-        let s = try #require(r.scrolls.first)
-        #expect(abs(s.vertical + 1) < 0.001)
+        let s = try #require(r.swipes.first)
+        #expect(s.input == .lines(-1))
+        #expect(r.scrolls.isEmpty)
+        #expect(r.touches.isEmpty)
+    }
+
+    @Test func preciseMouseNotchUsesTheLineCount() throws {
+        let (view, r) = view()
+        let event = try scroll(dy: -40, precise: true)
+        event.cgEvent?.setIntegerValueField(.scrollWheelEventDeltaAxis1, value: -1)
+        view.scrollWheel(with: event)
+        #expect(r.scrolls.isEmpty)
+        #expect(r.swipes.first?.input == .lines(-1))
+    }
+
+    @Test func wheelUpMovesTheFingerDownTheScreen() throws {
+        let (view, r) = view()
+        view.scrollWheel(with: try scroll(dy: 1, precise: false))
+        #expect(r.swipes.first?.input == .lines(1))
+        #expect(r.swipes.first?.x == 400 && r.swipes.first?.y == 800)
+    }
+
+    @Test func horizontalWheelStaysAScroll() throws {
+        let (view, r) = view()
+        view.scrollWheel(with: try scroll(dx: -1, precise: false))
+        #expect(r.swipes.isEmpty)
+        #expect(r.scrolls.count == 1)
+    }
+
+    @Test func wheelDuringMouseDragStaysAScroll() throws {
+        let (view, r) = view()
+        let down = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 200, y: 400),
+            modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+        view.mouseDown(with: down)
+        view.scrollWheel(with: try scroll(dy: -1, precise: false))
+        #expect(r.swipes.isEmpty)
+        #expect(r.scrolls.count == 1)
+        #expect(r.touches.count == 1)
     }
 
     @Test func mouseClickStillClicks() throws {

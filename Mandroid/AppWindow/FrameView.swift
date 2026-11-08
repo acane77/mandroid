@@ -8,6 +8,8 @@ final class FrameView: NSView {
     var displayDpi = 320 { didSet { scrollConverter = ScrollConverter(dpi: displayDpi) } }
     var onTouch: ((_ x: Int, _ y: Int, _ identifier: Int, _ pressure: Int) -> Void)?
     var onScroll: ((_ x: Int, _ y: Int, _ axes: ScrollConverter.Axes) -> Void)?
+    /// Vertical scroll that should move a finger. Positive travel is AppKit's content-down direction.
+    var onWheelSwipe: ((_ x: Int, _ y: Int, _ input: WheelSwipeInput) -> Void)?
     var onKey: ((KeyAction) -> Void)?
     var onFirstTouch: (() -> Void)?
 
@@ -103,19 +105,47 @@ final class FrameView: NSView {
         onKey?(.key("GoBack"))
     }
 
-    // MARK: Scroll → Android mouse wheel
+    // MARK: Scroll
 
     override func scrollWheel(with event: NSEvent) {
         var dx = Double(event.scrollingDeltaX), dy = Double(event.scrollingDeltaY)
         guard dx != 0 || dy != 0 else { return }
         let m = mapper
+        let p = convert(event.locationInWindow, from: nil)
+        let (x, y) = m.toDisplay(x: p.x, y: p.y)
         let precise = event.hasPreciseScrollingDeltas
+        // Vertical wheel and trackpad movement is a finger stroke. macOS reports
+        // precise pixel deltas for trackpads and for most mice, and a game treats
+        // the resulting mouse-wheel event as a tiny scroll. A button drag keeps
+        // the wheel as a scroll so it does not steal the click's finger.
+        if dy != 0, !mouseIsDown {
+            if Self.isTrackpadGesture(event) {
+                onWheelSwipe?(x, y, .pixels(m.deltaToDisplay(dx: 0, dy: dy).dy))
+            } else {
+                onWheelSwipe?(x, y, .lines(Self.wheelLines(event, dy: dy)))
+            }
+            return
+        }
         // Trackpad deltas are view points; content should follow the fingers.
         if precise { (dx, dy) = m.deltaToDisplay(dx: dx, dy: dy) }
         guard let axes = scrollConverter.convert(dx: dx, dy: dy, precise: precise) else { return }
-        let p = convert(event.locationInWindow, from: nil)
-        let (x, y) = m.toDisplay(x: p.x, y: p.y)
         onScroll?(x, y, axes)
+    }
+
+    /// A trackpad gesture has a scroll phase or a momentum phase. A mouse wheel has neither.
+    private static func isTrackpadGesture(_ event: NSEvent) -> Bool {
+        !event.phase.isEmpty || !event.momentumPhase.isEmpty
+    }
+
+    /// One notch is the integer line count. Smooth wheels that only publish a
+    /// point delta are about 10 points per notch.
+    private static func wheelLines(_ event: NSEvent, dy: Double) -> Double {
+        if let cg = event.cgEvent {
+            let lines = Double(cg.getIntegerValueField(.scrollWheelEventDeltaAxis1))
+            if lines != 0 { return lines }
+        }
+        if !event.hasPreciseScrollingDeltas { return dy }
+        return dy / 10
     }
 
     // MARK: Keys

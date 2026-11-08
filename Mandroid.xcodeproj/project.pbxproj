@@ -93,6 +93,8 @@
 		CC755A8A5F49632A6287CAD5 /* HostDevicesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FFDDC17B8230D60798FA257 /* HostDevicesTests.swift */; };
 		CDE305331380AF7CBD85F64C /* Unarchiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 452642B45534C755FF9E3CC4 /* Unarchiver.swift */; };
 		CF35185F02907A5A670B5C2A /* ScrollConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98537234E536D097055E8F0D /* ScrollConverter.swift */; };
+		8F2B6A1D0C4E59B7A3F8D2E1 /* WheelSwipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E8A1C0B7D2F49A6B5E3C1D0 /* WheelSwipe.swift */; };
+		6B0D4F8A2C1E53D9B7A5F0C3 /* WheelSwipeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A9C3E7B5D0F42C8A6B4E1F2 /* WheelSwipeTests.swift */; };
 		D0AD9DA64E84B6D390110921 /* UITestMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6779B6FF861E9BD4662EA422 /* UITestMode.swift */; };
 		D11CCC1F6AC91DB80A92B9C9 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 259DC05229C3C583DD81182C /* LibraryView.swift */; };
 		D20AB2C835CD8803EFAA36B9 /* EmulatorLaunchOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F939B33E5C022C395681A59 /* EmulatorLaunchOptions.swift */; };
@@ -226,6 +228,8 @@
 		96276D7B0CFD82A66CC11112 /* ParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParserTests.swift; sourceTree = "<group>"; };
 		9729937DF91EB20F700976AA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		98537234E536D097055E8F0D /* ScrollConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollConverter.swift; sourceTree = "<group>"; };
+		4E8A1C0B7D2F49A6B5E3C1D0 /* WheelSwipe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelSwipe.swift; sourceTree = "<group>"; };
+		1A9C3E7B5D0F42C8A6B4E1F2 /* WheelSwipeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WheelSwipeTests.swift; sourceTree = "<group>"; };
 		9DBE7D716FD2458F5DD3E580 /* EmulatorConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmulatorConnection.swift; sourceTree = "<group>"; };
 		A038F5C78A86CE57B44C749F /* DeviceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceProfile.swift; sourceTree = "<group>"; };
 		A22C4002AC149141CE2CCFEA /* APKBadging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APKBadging.swift; sourceTree = "<group>"; };
@@ -383,6 +387,7 @@
 				6A3873AFE57EB00977EA7D31 /* KeyMap.swift */,
 				13A02C3698E757F2C4C47096 /* ScrollChannel.swift */,
 				98537234E536D097055E8F0D /* ScrollConverter.swift */,
+				4E8A1C0B7D2F49A6B5E3C1D0 /* WheelSwipe.swift */,
 			);
 			path = Input;
 			sourceTree = "<group>";
@@ -593,6 +598,7 @@
 				AD9C4268BD8813AED61B437D /* GPUBackendTests.swift */,
 				4FFDDC17B8230D60798FA257 /* HostDevicesTests.swift */,
 				1592A1AB2261451271FC320C /* InputTests.swift */,
+				1A9C3E7B5D0F42C8A6B4E1F2 /* WheelSwipeTests.swift */,
 				76786C4CB12B3475CC4DE318 /* KernelSUTests.swift */,
 				D8606B63E97ACE543CFD3493 /* MediaVolumeTests.swift */,
 				96276D7B0CFD82A66CC11112 /* ParserTests.swift */,
@@ -822,6 +828,7 @@
 				F04B857900FF2EA320B7B0EA /* GPUBackendTests.swift in Sources */,
 				CC755A8A5F49632A6287CAD5 /* HostDevicesTests.swift in Sources */,
 				F12B6081F2DF4A0290363E20 /* InputTests.swift in Sources */,
+				6B0D4F8A2C1E53D9B7A5F0C3 /* WheelSwipeTests.swift in Sources */,
 				78B50525F4B22DD63646A684 /* KernelSUTests.swift in Sources */,
 				D2F4038A521D72D1500DEBA4 /* LauncherStubBuilder.swift in Sources */,
 				587B50F4C78DFE79DFC8BEF2 /* MediaVolumeTests.swift in Sources */,
@@ -881,6 +888,7 @@
 				6E665EC43F8884619B5C7EE3 /* SHA1.swift in Sources */,
 				2783D70BFCB87F36B034DAFD /* ScrollChannel.swift in Sources */,
 				CF35185F02907A5A670B5C2A /* ScrollConverter.swift in Sources */,
+				8F2B6A1D0C4E59B7A3F8D2E1 /* WheelSwipe.swift in Sources */,
 				91BB969566A9EDE012EC6A97 /* ShellPipe.swift in Sources */,
 				33A7D28766027E7C46687D3F /* Subprocess.swift in Sources */,
 				F9CE9BA3584809592025885E /* TaskListParser.swift in Sources */,

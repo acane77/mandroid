@@ -125,6 +125,16 @@ struct SettingsView: View {
                 Text("For voice and video calls. macOS asks for permission the first time an app records; the Mac's camera acts as the front camera. Takes effect after a restart.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Mouse wheel") {
+                Stepper("Swipe distance: \(settings.wheelSwipeDistanceDP) dp",
+                        value: $settings.wheelSwipeDistanceDP,
+                        in: WheelSwipeTuning.distanceRange, step: WheelSwipeTuning.distanceStep)
+                Stepper("Swipe speed: \(settings.wheelSwipeSpeedDPPerSecond) dp/s",
+                        value: $settings.wheelSwipeSpeedDPPerSecond,
+                        in: WheelSwipeTuning.speedRange, step: WheelSwipeTuning.speedStep)
+                Text("A wheel notch slides a finger this far, at this speed (about \(wheelSwipeMilliseconds) ms). A trackpad swipe does the same, and the default distance matches the fingers. Applies immediately.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Windows") {
                 Picker("New windows open", selection: $settings.landscapeByDefault) {
                     Text("Landscape").tag(true)
@@ -177,6 +187,11 @@ struct SettingsView: View {
                 LauncherStubBuilder.sync(coordinator.apps)
             }
         }
+    }
+
+    private var wheelSwipeMilliseconds: Int {
+        let ms = Double(settings.wheelSwipeDistanceDP) / Double(max(settings.wheelSwipeSpeedDPPerSecond, 1)) * 1000
+        return max(Int(ms.rounded()), 1)
     }
 
     private var canDeleteEmulator: Bool {
