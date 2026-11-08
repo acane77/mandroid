@@ -78,7 +78,7 @@ struct SettingsView: View {
             }
             Section("KernelSU (experimental)") {
                 Toggle("Boot with KernelSU", isOn: $settings.kernelSUEnabled)
-                Text("Adds root support to the supported Android 36.1 ARM64 image. A separate patched image preserves the stock image. Turn this off and restart to return to stock; installed apps and data are kept.")
+                Text("Adds root support to the Android 36.1 ARM64 revision 4 image. A separate patched image preserves the stock image. Turn this off and restart to return to stock; installed apps and data are kept. This switch does not download a system image. Delete the emulator and create it again with Enable KernelSU integration when the installed revision is different.")
                     .font(.caption).foregroundStyle(.secondary)
                 if coordinator.session?.options.kernelSURamdisk != nil {
                     Label("KernelSU is active", systemImage: "checkmark.circle")

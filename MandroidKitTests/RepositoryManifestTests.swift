@@ -82,4 +82,54 @@ import Testing
                                          tag: "google_apis_playstore", abi: "arm64-v8a", preferredAPI: "35") { _ in nil }
         #expect(plan.systemImagePath == "system-images;android-35;google_apis_playstore;arm64-v8a")
     }
+
+    @Test func kernelSUPlanUsesManifestRevision4() throws {
+        let paths = SDKPaths(root: URL(fileURLWithPath: "/tmp/aar-test"))
+        let plan = try SDKBootstrap.plan(repository: repo(), systemImages: images(), paths: paths,
+                                         tag: "google_apis_playstore", abi: "arm64-v8a", preferredAPI: nil, kernelSU: true) { _ in nil }
+        let image = try #require(plan.components.first { $0.id == KernelSUPatcher.imagePackagePath })
+        #expect(image.archive.url.lastPathComponent == KernelSUPatcher.imageArchiveName)
+        #expect(image.archive.sha1 == KernelSUPatcher.imageArchiveSHA1)
+        #expect(image.package.revision == KernelSUPatcher.imageRevision)
+    }
+
+    @Test func kernelSUPlanKeepsRevision4WhenManifestIsNewer() throws {
+        var imgs = try images()
+        let index = try #require(imgs.packages.firstIndex { $0.path == KernelSUPatcher.imagePackagePath })
+        imgs.packages[index].revision = .init(major: 5)
+        let current = imgs.packages[index].archives[0]
+        imgs.packages[index].archives[0] = .init(hostOS: current.hostOS, hostArch: current.hostArch,
+                                                url: current.url.deletingLastPathComponent().appendingPathComponent("arm64-v8a-36.1_r05.zip"),
+                                                size: current.size, sha1: String(repeating: "ab", count: 20))
+        let paths = SDKPaths(root: URL(fileURLWithPath: "/tmp/aar-test"))
+        let pinned = try SDKBootstrap.plan(repository: repo(), systemImages: imgs, paths: paths,
+                                           tag: "google_apis_playstore", abi: "arm64-v8a", preferredAPI: nil, kernelSU: true) { _ in nil }
+        let image = try #require(pinned.components.first { $0.id == KernelSUPatcher.imagePackagePath })
+        #expect(image.archive.url.lastPathComponent == KernelSUPatcher.imageArchiveName)
+        #expect(image.archive.sha1 == KernelSUPatcher.imageArchiveSHA1)
+        #expect(image.package.revision == KernelSUPatcher.imageRevision)
+
+        let newest = try SDKBootstrap.plan(repository: repo(), systemImages: imgs, paths: paths,
+                                           tag: "google_apis_playstore", abi: "arm64-v8a", preferredAPI: nil, kernelSU: false) { _ in nil }
+        let latest = try #require(newest.components.first { $0.id == KernelSUPatcher.imagePackagePath })
+        #expect(latest.archive.url.lastPathComponent == "arm64-v8a-36.1_r05.zip")
+        #expect(latest.archive.sha1 == String(repeating: "ab", count: 20))
+    }
+
+    @Test func kernelSUPlanDownloadsUntilRevision4IsInstalled() throws {
+        let paths = SDKPaths(root: URL(fileURLWithPath: "/tmp/aar-test"))
+        func plan(installed: RepositoryManifest.Revision) throws -> BootstrapPlan {
+            try SDKBootstrap.plan(repository: repo(), systemImages: images(), paths: paths,
+                                 tag: "google_apis_playstore", abi: "arm64-v8a", preferredAPI: nil, kernelSU: true) { dir in
+                dir.path.contains("system-images") ? installed : .init(major: 99)
+            }
+        }
+        let older = try plan(installed: .init(major: 3))
+        #expect(older.components.map(\.id) == [KernelSUPatcher.imagePackagePath])
+        let current = try plan(installed: .init(major: 4))
+        #expect(current.isEmpty)
+        let newer = try plan(installed: .init(major: 5))
+        #expect(newer.components.map(\.id) == [KernelSUPatcher.imagePackagePath])
+        #expect(newer.components[0].archive.sha1 == KernelSUPatcher.imageArchiveSHA1)
+    }
 }

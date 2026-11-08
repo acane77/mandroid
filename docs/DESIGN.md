@@ -167,7 +167,10 @@ Each `<remotePackage>` carries `<channelRef>`, `<revision>` and one or more
 a relative `url`, `size` and a SHA-1 `checksum`. Archive URLs are resolved
 against the manifest's directory. Build ids change every release, so the
 manifest is parsed at runtime and nothing is hard-coded except the package
-paths.
+paths. KernelSU integration is the exception: it pins
+`system-images;android-36.1;google_apis_playstore;arm64-v8a` revision 4
+(`arm64-v8a-36.1_r04.zip` and its SHA-1). When that checkbox is on, a newer
+revision in the live manifest is not downloaded.
 
 **Download mirrors** (`DownloadMirror`). Google's hosts are unreachable from
 mainland China and `dl.google.cn` no longer resolves, so the bootstrap can
@@ -496,9 +499,14 @@ registers `mandroid`; not `LSUIElement` (we own real windows).
 ### 5.1 Lifecycle
 
 1. **Setup** (`needsSetup`): show what will be downloaded and how big it is
-   (≈ 2.4 GB), the license notice, and the system image choice. Download,
-   verify, extract, write `licenses/`, write the AVD. No `platforms/` directory
-   is needed (§3.4).
+   (≈ 2.4 GB), the license notice, and the system image choice. **Enable
+   KernelSU integration** selects the pinned Android 36.1 revision 4 image;
+   leaving it off keeps the newest stable Play image. The same checkbox is on
+   the create-emulator screen. Download, verify, extract, write `licenses/`,
+   write the AVD. No `platforms/` directory is needed (§3.4). Creating an
+   emulator with the checkbox on downloads revision 4 first when that image is
+   not already installed. An existing userdata directory is not switched to a
+   different system image from Settings.
 2. **Boot**: spawn the emulator, wait for adb, wait for
    `sys.boot_completed`, apply guest settings
    (`settings put secure show_ime_with_hard_keyboard 0`,
@@ -730,6 +738,11 @@ Use the same signing key for upgrades. Runtime users need no Android build tools
 pinned by SHA-256 and verified before execution. CryptoKit is supplied by
 macOS; no package dependency is added. Kernel compatibility is checked against
 the actual decompressed kernel version, including its build and page size.
+The supported system image is Android 36.1 ARM64 revision 4. A new emulator
+with **Enable KernelSU integration** installs that revision, replacing only
+that package directory. Boot with KernelSU uses that directory rather than
+the highest installed API. Settings' **Boot with KernelSU** switch does not
+download or replace an image while guest data exists.
 
 The cache key includes the stock kernel and ramdisk hashes; a manifest verifies
 the patched ramdisk and extracted guest helper before reuse. Failed or cancelled

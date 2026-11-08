@@ -50,8 +50,8 @@ public final class RunnerCoordinator {
     /// One owner for Settings and boot requests; shutdown cancels and drains it.
     public func prepareKernelSU() async throws -> KernelSUPatcher.Prepared {
         if let kernelSUPreparation { return try await kernelSUPreparation.value }
-        guard let image = bootstrap.installedSystemImage() else {
-            throw MandroidKitError.avd("Install a system image before preparing KernelSU.")
+        guard let image = bootstrap.bootImage(kernelSU: true) else {
+            throw KernelSUPatcher.missingImageError()
         }
         preparingKernelSU = true
         kernelSUError = nil
@@ -86,6 +86,9 @@ public final class RunnerCoordinator {
     public func cancelKernelSUPreparation() { kernelSUPreparation?.cancel() }
 
     private var bootTask: Task<Void, Never>?
+    /// Set when a KernelSU image download fails, so Try Again fetches that
+    /// archive again instead of patching whatever image is already installed.
+    private var retryKernelSUSetup = false
     private var changingPackages = Set<String>()
 
     public init(paths: SDKPaths = .default) {
@@ -104,24 +107,33 @@ public final class RunnerCoordinator {
         state = .checking
         bootTask = Task {
             defer { bootTask = nil }
-            if bootstrap.isReady {
-                await boot(coldBoot: false, isRetry: false)
-            } else {
-                do {
-                    await bootstrap.setMirrors(RunnerSettings.load().mirrors)
-                    let plan = try await bootstrap.makePlan()
-                    try Task.checkCancellation()
-                    if plan.isEmpty {
-                        await boot(coldBoot: false, isRetry: false)
-                    } else if UserDefaults.standard.bool(forKey: "autoSetup") {
-                        // `-autoSetup YES` skips the confirmation (integration tests).
-                        await performSetup(plan)
-                    } else {
-                        state = .needsSetup(plan)
-                    }
-                } catch {
-                    if !Task.isCancelled { state = .failed(error.localizedDescription) }
+            let resumeKernelSU = retryKernelSUSetup
+            retryKernelSUSetup = false
+            do {
+                let settings = RunnerSettings.load()
+                await bootstrap.setMirrors(settings.mirrors)
+                // A new emulator can replace the system image. An existing
+                // userdata directory keeps its image; Settings does not download one.
+                let replacingImage = settings.kernelSUEnabled
+                    && !bootstrap.pinnedKernelSUImageInstalled
+                    && !avdStore.hasUserdata(avdName)
+                if bootstrap.isReady && !replacingImage {
+                    await boot(coldBoot: false, isRetry: false)
+                    return
                 }
+                let plan = try await bootstrap.makePlan(kernelSU: settings.kernelSUEnabled)
+                try Task.checkCancellation()
+                if plan.isEmpty {
+                    await boot(coldBoot: false, isRetry: false)
+                } else if resumeKernelSU || UserDefaults.standard.bool(forKey: "autoSetup") || (replacingImage && bootstrap.isReady) {
+                    // `-autoSetup YES` skips the confirmation (integration tests).
+                    // Creating an emulator with KernelSU downloads revision 4 before boot.
+                    await performSetup(plan)
+                } else {
+                    state = .needsSetup(plan)
+                }
+            } catch {
+                if !Task.isCancelled { state = .failed(error.localizedDescription) }
             }
         }
     }
@@ -145,7 +157,10 @@ public final class RunnerCoordinator {
             try Task.checkCancellation()
             await boot(coldBoot: false, isRetry: false)
         } catch {
-            if !Task.isCancelled { state = .failed(error.localizedDescription) }
+            if !Task.isCancelled {
+                if RunnerSettings.load().kernelSUEnabled { retryKernelSUSetup = true }
+                state = .failed(error.localizedDescription)
+            }
         }
     }
 
@@ -175,12 +190,13 @@ public final class RunnerCoordinator {
         do {
             try Task.checkCancellation()
             setStage("Preparing virtual device")
-            guard let image = bootstrap.installedSystemImage() else {
+            let settings = RunnerSettings.load()
+            guard let image = bootstrap.bootImage(kernelSU: settings.kernelSUEnabled) else {
+                if settings.kernelSUEnabled { throw KernelSUPatcher.missingImageError() }
                 throw MandroidKitError.avd("no system image installed")
             }
             var config = AVDConfig(systemImagePath: image.packagePath)
             config.name = avdName
-            let settings = RunnerSettings.load()
             settings.apply(to: &config)
             var kernelSU: KernelSUPatcher.Prepared?
             if settings.kernelSUEnabled {
@@ -594,7 +610,9 @@ public final class RunnerCoordinator {
     private var deletingDevice = false
 
     /// Boots a new emulator after `deleteVirtualDevice()`. The data partition
-    /// size is whatever Settings saved before this call.
+    /// size is whatever Settings saved before this call. When KernelSU
+    /// integration is enabled and revision 4 is not installed, `start()`
+    /// downloads that image before the first boot.
     public func createEmulator() {
         guard case .needsEmulator = state else { return }
         state = .idle

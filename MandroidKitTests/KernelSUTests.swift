@@ -44,6 +44,29 @@ import Testing
         #expect(!launch.arguments.contains("-ramdisk"))
     }
 
+    @Test func bootImageUsesPinnedDirectoryWhenKernelSUIsOn() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let paths = SDKPaths(root: root)
+        let newer = paths.directory(forPackagePath: "system-images;android-37;google_apis_playstore;arm64-v8a")
+        let pinned = paths.directory(forPackagePath: KernelSUPatcher.imagePackagePath)
+        try FileManager.default.createDirectory(at: newer, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: pinned, withIntermediateDirectories: true)
+        try Data().write(to: newer.appendingPathComponent("system.img"))
+        try Data().write(to: pinned.appendingPathComponent("system.img"))
+        try "Pkg.Revision=4\n".write(to: pinned.appendingPathComponent("source.properties"), atomically: true, encoding: .utf8)
+        let bootstrap = SDKBootstrap(paths: paths)
+        #expect(bootstrap.installedSystemImage()?.packagePath == "system-images;android-37;google_apis_playstore;arm64-v8a")
+        #expect(bootstrap.bootImage(kernelSU: false)?.packagePath == "system-images;android-37;google_apis_playstore;arm64-v8a")
+        #expect(bootstrap.bootImage(kernelSU: true)?.packagePath == KernelSUPatcher.imagePackagePath)
+        #expect(bootstrap.pinnedKernelSUImageInstalled)
+        try "Pkg.Revision=3\n".write(to: pinned.appendingPathComponent("source.properties"), atomically: true, encoding: .utf8)
+        #expect(!bootstrap.pinnedKernelSUImageInstalled)
+        #expect(bootstrap.bootImage(kernelSU: true)?.packagePath == KernelSUPatcher.imagePackagePath)
+        try FileManager.default.removeItem(at: pinned.appendingPathComponent("system.img"))
+        #expect(bootstrap.bootImage(kernelSU: true) == nil)
+    }
+
     @Test func rejectsDifferentKernelsAndPageSizes() throws {
         try KernelSUPatcher.requireSupportedKernel(Data("prefix Linux version \(KernelSUPatcher.kernelVersion) build".utf8))
         for version in ["6.12.38-android16-5-other-4k", KernelSUPatcher.kernelVersion + "-16k", "6.6.1-android15-4k"] {

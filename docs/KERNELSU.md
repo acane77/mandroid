@@ -31,10 +31,16 @@ Mandroid's documented Play Integrity limitation.
 
 ## Setup and recovery
 
-1. Let Mandroid finish installing its normal SDK and system image.
-2. Open Settings (⌘,), enable **Boot with KernelSU**, and click
-   **Restart to Apply**. Alternatively, use **Prepare Patched Image** first;
-   preparing alone does not enable root or restart the current session.
+1. On the first download screen, or on **Create a new emulator**, check
+   **Enable KernelSU integration**. That selects Google Play Android 36.1
+   ARM64 revision 4 (`arm64-v8a-36.1_r04.zip`). Leave it unchecked to download
+   and boot the newest stable Play image.
+2. If revision 4 is not installed, Mandroid downloads it and replaces only
+   `system-images/android-36.1/google_apis_playstore/arm64-v8a/` before the
+   emulator is created. Other installed API levels stay on disk and are not
+   used for this boot. The first rooted boot then prepares the patched ramdisk.
+   Preparing from Settings does not download a system image or restart the
+   current session.
 3. Wait for Android to boot. Settings reports activation after checking the
    kernel module, and Manager opens on Device Screen. Use Manager for root
    grants; Mandroid does not grant root to the ADB shell automatically.
@@ -44,7 +50,7 @@ To return to stock, turn **Boot with KernelSU** off and select
 
 | Situation | Action |
 | --- | --- |
-| Unsupported kernel | Disable KernelSU and restart. The Android API number alone does not establish compatibility; the full kernel version must match. |
+| Unsupported kernel | Turn KernelSU off and restart to boot the installed image. The Android API number alone does not establish compatibility; the full kernel version must match. Settings does not replace a system image while guest data exists. Delete the emulator and create it again with **Enable KernelSU integration** to install revision 4. |
 | Download or checksum error | Check access to GitHub, then retry **Prepare Patched Image**. The SDK mirror setting does not redirect these downloads. |
 | Preparation cancelled | Retry preparation when ready, or disable KernelSU to boot stock. |
 | Patched kernel did not activate | Disable KernelSU and restart; retain logs from Settings ▸ Files ▸ Show Logs for diagnosis. |

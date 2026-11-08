@@ -7,6 +7,7 @@ struct SetupView: View {
     @Bindable var coordinator: RunnerCoordinator
     @State private var mirrorPreference = RunnerSettings.load().downloadMirror
     @State private var dataPartitionGB = RunnerSettings.load().dataPartitionMB / 1024
+    @State private var kernelSUEnabled = RunnerSettings.load().kernelSUEnabled
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,8 +48,10 @@ struct SetupView: View {
         .frame(minWidth: 480, idealWidth: 520, minHeight: 360, idealHeight: 480)
         .animation(HostStyle.motion(reduceMotion: reduceMotion), value: stage)
         .onChange(of: stage) { _, new in
-            guard new == "needs-emulator" else { return }
-            dataPartitionGB = RunnerSettings.load().dataPartitionMB / 1024
+            guard new == "needs-emulator" || new == "plan" else { return }
+            let settings = RunnerSettings.load()
+            dataPartitionGB = settings.dataPartitionMB / 1024
+            kernelSUEnabled = settings.kernelSUEnabled
         }
     }
 
@@ -90,6 +93,7 @@ struct SetupView: View {
                 Text("The virtual device and its installed apps have been removed. The downloaded Android system stays on this Mac.")
                     .fixedSize(horizontal: false, vertical: true)
                 storageChoice
+                kernelSUChoice
             }
         case .settingUp(let phase):
             phaseView(phase)
@@ -133,6 +137,7 @@ struct SetupView: View {
                 coordinator.retry()
             }
             storageChoice
+            kernelSUChoice
             Text("By continuing you accept the Android SDK License Agreement and the terms of the Google Play system image. Nothing outside this app's folder is modified.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -154,6 +159,33 @@ struct SetupView: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    @ViewBuilder private var kernelSUChoice: some View {
+        Toggle("Enable KernelSU integration", isOn: $kernelSUEnabled)
+            .toggleStyle(.checkbox)
+            .onChange(of: kernelSUEnabled) { _, new in
+                var s = RunnerSettings.load()
+                guard s.kernelSUEnabled != new else { return }
+                s.kernelSUEnabled = new
+                s.save()
+                if case .needsSetup = coordinator.state { coordinator.retry() }
+            }
+        Text("Uses the Android 36.1 ARM64 revision 4 system image. If that revision is not installed, it is downloaded and replaces the image at that package path before the emulator is created.")
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        Text(installedImageNote)
+            .font(.caption).foregroundStyle(.secondary)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var installedImageNote: String {
+        guard let image = coordinator.bootstrap.installedSystemImage() else {
+            return "No system image is installed yet."
+        }
+        let revision = coordinator.bootstrap.installedRevision(at: image.directory)?.description ?? "unknown"
+        return "Installed system image: \(image.packagePath) (revision \(revision))."
     }
 
     @ViewBuilder private func phaseView(_ phase: BootstrapPhase) -> some View {

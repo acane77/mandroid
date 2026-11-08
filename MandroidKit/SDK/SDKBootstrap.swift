@@ -91,6 +91,26 @@ public actor SDKBootstrap {
         return found.sorted { $0.2 > $1.2 }.first.map { ($0.0, $0.1) }
     }
 
+    /// Image used for the next boot. KernelSU sessions use the pinned
+    /// Android 36.1 revision 4 directory even when a higher API image is installed.
+    /// Returns nil when that directory has no `system.img`.
+    public nonisolated func bootImage(kernelSU: Bool) -> (packagePath: String, directory: URL)? {
+        if kernelSU {
+            let path = KernelSUPatcher.imagePackagePath
+            let dir = paths.directory(forPackagePath: path)
+            guard FileManager.default.fileExists(atPath: dir.appendingPathComponent("system.img").path) else { return nil }
+            return (path, dir)
+        }
+        return installedSystemImage()
+    }
+
+    /// True when the pinned KernelSU image is installed at exactly revision 4.
+    public nonisolated var pinnedKernelSUImageInstalled: Bool {
+        let dir = paths.directory(forPackagePath: KernelSUPatcher.imagePackagePath)
+        guard FileManager.default.fileExists(atPath: dir.appendingPathComponent("system.img").path) else { return false }
+        return installedRevision(at: dir) == KernelSUPatcher.imageRevision
+    }
+
     public nonisolated var isReady: Bool {
         FileManager.default.isExecutableFile(atPath: paths.emulatorBinary.path)
             && FileManager.default.isExecutableFile(atPath: paths.adbBinary.path)
@@ -135,14 +155,36 @@ public actor SDKBootstrap {
 
     /// Builds the plan of missing components. `preferredAPI` (e.g. "36.1")
     /// selects a system image; otherwise the newest stable one is used.
+    /// `kernelSU` installs the pinned Android 36.1 revision 4 image instead.
     public func makePlan(tag: String = SDKBootstrap.defaultTag,
                          abi: String = SDKBootstrap.defaultABI,
-                         preferredAPI: String? = nil) async throws -> BootstrapPlan {
+                         preferredAPI: String? = nil,
+                         kernelSU: Bool = false) async throws -> BootstrapPlan {
         let (repo, imgs, mirror) = try await fetchManifests(tag: tag)
         var plan = try Self.plan(repository: repo, systemImages: imgs, paths: paths, tag: tag, abi: abi,
-                                 preferredAPI: preferredAPI, installedRevision: installedRevision(at:))
+                                 preferredAPI: preferredAPI, kernelSU: kernelSU, installedRevision: installedRevision(at:))
         plan.mirror = mirror
         return plan
+    }
+
+    /// The KernelSU image. Revision 4 is taken from the manifest, including its
+    /// URL and checksum. A newer manifest entry is not used; the pinned archive
+    /// name and checksum are resolved in that manifest's directory instead.
+    static func kernelSUSystemImage(in imgs: RepositoryManifest,
+                                    emulatorRevision: RepositoryManifest.Revision) throws -> (RepositoryManifest.Package, RepositoryManifest.Archive) {
+        guard var (pkg, archive) = imgs.package(path: KernelSUPatcher.imagePackagePath) else {
+            throw MandroidKitError.manifest("KernelSU image \(KernelSUPatcher.imagePackagePath) is not in the system-image repository")
+        }
+        if let dep = pkg.dependencies.first(where: { $0.path == "emulator" }), let min = dep.minRevision, emulatorRevision < min {
+            throw MandroidKitError.manifest("KernelSU image requires emulator \(min) or newer")
+        }
+        guard pkg.revision == KernelSUPatcher.imageRevision else {
+            let url = archive.url.deletingLastPathComponent().appendingPathComponent(KernelSUPatcher.imageArchiveName)
+            archive = .init(hostOS: nil, hostArch: nil, url: url, size: KernelSUPatcher.imageArchiveBytes, sha1: KernelSUPatcher.imageArchiveSHA1)
+            pkg.revision = KernelSUPatcher.imageRevision
+            return (pkg, archive)
+        }
+        return (pkg, archive)
     }
 
     /// Pure planning function (unit-testable).
@@ -152,6 +194,7 @@ public actor SDKBootstrap {
                             tag: String,
                             abi: String,
                             preferredAPI: String?,
+                            kernelSU: Bool = false,
                             installedRevision: (URL) -> RepositoryManifest.Revision?) throws -> BootstrapPlan {
         guard let (emuPkg, emuArchive) = repo.package(path: "emulator") else {
             throw MandroidKitError.manifest("no stable emulator for this Mac in the repository")
@@ -159,32 +202,42 @@ public actor SDKBootstrap {
         guard let (ptPkg, ptArchive) = repo.package(path: "platform-tools") else {
             throw MandroidKitError.manifest("no platform-tools in the repository")
         }
-        let images = imgs.systemImages(tag: tag, abi: abi)
-        let candidates = images.filter { pkg, _ in
-            // Respect the image's minimum emulator revision.
-            if let dep = pkg.dependencies.first(where: { $0.path == "emulator" }), let min = dep.minRevision {
-                return emuPkg.revision >= min
-            }
-            return true
-        }
-        let chosen: (RepositoryManifest.Package, RepositoryManifest.Archive)?
-        if let preferredAPI {
-            chosen = candidates.first { $0.0.apiLevel == preferredAPI } ?? candidates.first
+        let imgPkg: RepositoryManifest.Package
+        let imgArchive: RepositoryManifest.Archive
+        if kernelSU {
+            (imgPkg, imgArchive) = try kernelSUSystemImage(in: imgs, emulatorRevision: emuPkg.revision)
         } else {
-            chosen = candidates.first
-        }
-        guard let (imgPkg, imgArchive) = chosen else {
-            throw MandroidKitError.manifest("no \(tag) \(abi) system image available")
+            let images = imgs.systemImages(tag: tag, abi: abi)
+            let candidates = images.filter { pkg, _ in
+                // Respect the image's minimum emulator revision.
+                if let dep = pkg.dependencies.first(where: { $0.path == "emulator" }), let min = dep.minRevision {
+                    return emuPkg.revision >= min
+                }
+                return true
+            }
+            let chosen: (RepositoryManifest.Package, RepositoryManifest.Archive)?
+            if let preferredAPI {
+                chosen = candidates.first { $0.0.apiLevel == preferredAPI } ?? candidates.first
+            } else {
+                chosen = candidates.first
+            }
+            guard let chosen else {
+                throw MandroidKitError.manifest("no \(tag) \(abi) system image available")
+            }
+            (imgPkg, imgArchive) = chosen
         }
 
         var components: [SDKComponent] = []
-        func need(_ pkg: RepositoryManifest.Package, _ archive: RepositoryManifest.Archive, _ dir: URL) {
-            if let installed = installedRevision(dir), installed >= pkg.revision { return }
+        func need(_ pkg: RepositoryManifest.Package, _ archive: RepositoryManifest.Archive, _ dir: URL, exact: Bool = false) {
+            if let installed = installedRevision(dir) {
+                if exact ? installed == pkg.revision : installed >= pkg.revision { return }
+            }
             components.append(SDKComponent(package: pkg, archive: archive, installDirectory: dir))
         }
         need(ptPkg, ptArchive, paths.platformToolsDir)
         need(emuPkg, emuArchive, paths.emulatorDir)
-        need(imgPkg, imgArchive, paths.directory(forPackagePath: imgPkg.path))
+        // KernelSU accepts only revision 4. A newer image in the same directory is replaced.
+        need(imgPkg, imgArchive, paths.directory(forPackagePath: imgPkg.path), exact: kernelSU)
 
         var licenses: [RepositoryManifest.License] = []
         for (pkg, manifest) in [(ptPkg, repo), (emuPkg, repo), (imgPkg, imgs)] {

@@ -6,6 +6,19 @@ public struct KernelSUPatcher: Sendable {
     public static let version = "3.3.0"
     public static let kernelVersion = "6.12.38-android16-5-gbb9513914902-ab13996879-4k"
     public static let managerPackage = "me.weishu.kernelsu"
+    /// Google Play ARM64 image whose stock kernel matches `kernelVersion`.
+    /// Newer revisions of the same package path replace this directory, so the
+    /// archive name and checksum stay pinned when the manifest moves on.
+    public static let imagePackagePath = "system-images;android-36.1;google_apis_playstore;arm64-v8a"
+    public static let imageRevision = RepositoryManifest.Revision(major: 4)
+    public static let imageArchiveName = "arm64-v8a-36.1_r04.zip"
+    public static let imageArchiveSHA1 = "193d86bad80d9ff79fe4272304f3193e7c097e1e"
+    public static let imageArchiveBytes: Int64 = 1_958_370_801
+    public static let imageRecoveryHint = "Delete the emulator and create it again with Enable KernelSU integration, or turn KernelSU off to boot the stock image."
+
+    public static func missingImageError() -> MandroidKitError {
+        .avd("KernelSU needs the Android 36.1 ARM64 revision 4 system image. \(imageRecoveryHint)")
+    }
     let root: URL
 
     struct Asset: Sendable {
@@ -51,7 +64,7 @@ public struct KernelSUPatcher: Sendable {
         // compatibility from the SDK API number or the kernel's major version.
         let marker = Data("Linux version \(kernelVersion) ".utf8)
         guard bytes.range(of: marker) != nil else {
-            throw Failure("This image's kernel is unsupported. KernelSU currently supports the Android 36.1 ARM64 image with kernel \(kernelVersion). Turn KernelSU off to boot the stock image.")
+            throw Failure("This image's kernel is unsupported. KernelSU currently supports the Android 36.1 ARM64 revision 4 image with kernel \(kernelVersion). \(imageRecoveryHint)")
         }
     }
 
